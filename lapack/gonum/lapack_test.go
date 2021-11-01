@@ -642,3 +642,8 @@ func TestIladlr(t *testing.T) {
 	t.Parallel()
 	testlapack.IladlrTest(t, impl)
 }
+
+func TestDtgsyl(t *testing.T) {
+	t.Parallel()
+	testlapack.DtgsylTest(t, impl)
+}
