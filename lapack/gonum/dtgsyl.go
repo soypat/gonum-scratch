@@ -9,6 +9,7 @@ import (
 // Dpstrf computes the Cholesky factorization with complete pivoting of an n×n
 // symmetric positive semidefinite matrix A.
 //
+
 // The factorization has the form
 //  Pᵀ * A * P = Uᵀ * U ,  if uplo = blas.Upper,
 //  Pᵀ * A * P = L  * Lᵀ,  if uplo = blas.Lower,
