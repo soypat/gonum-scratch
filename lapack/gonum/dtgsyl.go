@@ -3,13 +3,13 @@ package gonum
 import (
 	"math"
 
+	"gonum.org/v1/gonum/blas"
 	"gonum.org/v1/gonum/blas/blas64"
 )
 
 // Dpstrf computes the Cholesky factorization with complete pivoting of an n×n
 // symmetric positive semidefinite matrix A.
 //
-
 // The factorization has the form
 //  Pᵀ * A * P = Uᵀ * U ,  if uplo = blas.Upper,
 //  Pᵀ * A * P = L  * Lᵀ,  if uplo = blas.Lower,
@@ -22,7 +22,8 @@ import (
 // otherwise Dpstrf will panic.
 //
 // Dpstrf is an internal routine. It is exported for testing purposes.
-func (impl Implementation) Dtgsyl(trans string, ijob int, m int, n int, a [][]float64, lda int, b [][]float64, ldb int, c [][]float64, ldc int, d []float64, ldd int, e []float64, lde int, f []float64, ldf int, dif float64, scale float64, work []float64, lwork int, iwork []float64, info int) int {
+//func (impl Implementation) Dtgsyl(trans blas.Transpose, ijob int, m int, n int, a []float64, lda int, b []float64, ldb int, c []float64, ldc int, d []float64, ldd int, e []float64, lde int, f []float64, ldf int, dif float64, scale float64, work []float64, lwork int, iwork []float64, info int) int {
+func (impl Implementation) Dtgsyl(trans blas.Transpose, ijob int, m int, n int, a []float64, lda int, b []float64, ldb int, c []float64, ldc int, d []float64, ldd int, e []float64, lde int, f []float64, ldf int, work []float64, lwork int, iwork []int, info int) int {
 
 	//parameter( zero == 0, one == 1 )
 	var lquery, notran bool
@@ -86,7 +87,7 @@ func (impl Implementation) Dtgsyl(trans string, ijob int, m int, n int, a [][]fl
 	} else if lquery {
 		panic(lquery)
 	}
-	//     Quick return if possible
+	//     Quick return if possible.
 
 	if (m == 0) || (n == 0) {
 		//scale[0] = float64(1)
@@ -100,9 +101,9 @@ func (impl Implementation) Dtgsyl(trans string, ijob int, m int, n int, a [][]fl
 		//RETURN
 	}
 
-	//    Determine optimal block sizes MB and NB
-	mb = impl.Ilaenv(2, "DTGSYL", trans, m, n, -1, -1)
-	nb = impl.Ilaenv(5, "DTGSYL", trans, m, n, -1, -1)
+	//    Determine optimal block sizes MB and NB.
+	mb = impl.Ilaenv(2, "DTGSYL", trans, m, n, -1, -1) //aca que onda con trans porque la funcion dice que es lugar para opciones del algoritmo.
+	nb = impl.Ilaenv(5, "DTGSYL", trans, m, n, -1, -1) //aca que onda con trans porque la funcion dice que es lugar para opciones del algoritmo.
 
 	isolve = 1
 	ifunc = 0
@@ -119,7 +120,7 @@ func (impl Implementation) Dtgsyl(trans string, ijob int, m int, n int, a [][]fl
 	if ((mb <= 1) && (nb <= 1)) || ((mb >= m) && (nb >= n)) {
 		//DO 30 iround = 1, isolve
 		for iround := 1; iround <= isolve; iround++ {
-			//           Use unblocked Level 2 solver
+			//           Use unblocked Level 2 solver.
 			dscale = 0
 			dsum = 1
 			pq = 0
@@ -127,7 +128,7 @@ func (impl Implementation) Dtgsyl(trans string, ijob int, m int, n int, a [][]fl
 			if dscale != 0 {
 				if (ijob == 1) || (ijob == 3) {
 					//dif = Sqrt(dble(2*m*n)) / (dscale * Sqrt(dsum))
-					dif = math.Sqrt((2 * float64(m) * float64(n))) / (dscale * math.Sqrt(dsum))
+					dif = math.Sqrt(float64(2*m*n) / (dscale * math.Sqrt(dsum)))
 				} else {
 					//dif = math.Sqrt(dble(pq)) / (dscale * math.Sqrt(dsum))
 					dif = math.Sqrt((float64(pq))) / (dscale * math.Sqrt(dsum))
@@ -139,70 +140,67 @@ func (impl Implementation) Dtgsyl(trans string, ijob int, m int, n int, a [][]fl
 					ifunc = ijob
 				}
 				scale2 = scale
-				//impl.Dlacpy('F', m, n, c, ldc, work, m)
-				//impl.Dlacpy('F', m, n, c[1:], ldc, work, m) no hay forma que lo tome, no sera que esta funcion habra q reformarla a dlacopy?
-
-				//impl.Dlacpy('F', m, n, f, ldf, work[m*n+1], m)  work[m*n+1]?????? que onda con esto porque dlacpy en el penultimo argumento pide []float64
-				impl.Dlacpy('F', m, n, f, ldf, work, m)
-				//impl.Dlaset('F', m, n, 0, 0, c, ldc) c[1:] tampoco lo toma
-				impl.Dlaset('F', m, n, 0, 0, f, ldf)
+				impl.Dlacpy(blas.All, m, n, c, ldc, work, m)
+				impl.Dlacpy(blas.All, m, n, f, ldf, work[m*n:], m) // -1 porque se usan variables longitud en el indice
+				impl.Dlaset(blas.All, m, n, 0, 0, c, ldc)
+				impl.Dlaset(blas.All, m, n, 0, 0, f, ldf)
 			} else if (isolve == 2) && (iround == 2) {
-				//impl.Dlacpy('F', m, n, work, m, c, ldc) c[1:] tampoco lo toma
-				//impl.Dlacpy('F', m, n, work(m*n+1), m, f, ldf) work[m*n+1]?????
-				impl.Dlacpy('F', m, n, work, m, f, ldf)
+				impl.Dlacpy(blas.All, m, n, work, m, c, ldc)
+				impl.Dlacpy(blas.All, m, n, work[m*n:], m, f, ldf)
 				scale = scale2
 			}
-			//cierro for
-		} //cierro for
-		//*retrun ????
+			//cierro for.
+		} //cierro for.
+		//*retrun ????.
 	}
 
-	//     Determine block structure of A
+	//     Determine block structure of A.
 
-	p = 0
-	i = 1
+	p = -1 //tener en cuenta se le resto 1
+	i = 0  //tener en cuenta se le resto 1
 G40: //CONTINUE
-	if i > m {
+	if i > m-1 {
 		goto G50
 	}
 	p = p + 1
-	iwork[p] = float64(i)
-	i = i + mb
-	if i >= m {
+	iwork[p] = i
+	i += mb
+	if i >= m-1 { //tener en cuenta se le resto 1
 		goto G50
 	}
-	if a[i][i-1] != 0 {
+	if a[i*lda+i-1] != 0 { //aca como hacemos? porque el fortran esta como si fuese matriz y ahora que pasamos todo a vector tendriamos q ver como la recorremos
 		i = i + 1
 	}
 	goto G40
 G50: //CONTINUE
-	iwork[p+1] = float64(m + 1)
+	iwork[p+1] = (m + 1) // tener en cuenta fijarse si iwork es indice y si es correcto hacerle el +1.
 	if iwork[p] == iwork[p+1] {
-		p = p - 1
+		p--
 	}
 
-	//     Determine block structure of B
+	//     Determine block structure of B.
 
-	q = p + 1
-	j = 1
+	q = p + 1 //tener en cuenta si son indices, puede que haya que corregir.
+	j = 1     //tener en cuenta si son indices, puede que haya que corregir.
 G60: //CONTINUE
 	if j > n {
 		goto G70
 	}
 	q = q + 1
-	iwork[q] = float64(j)
+	iwork[q] = j
 	j = j + nb
 	if j >= n {
 		goto G70
 	}
-	if b[j][j-1] != 0 {
+	//b[j][j-1]
+	if b[j*ldb+j-1] != 0 {
 		j = j + 1
 	}
 	goto G60
 G70: //CONTINUE
-	iwork[q+1] = float64(n + 1)
+	iwork[q+1] = n + 1
 	if iwork[q] == iwork[q+1] {
-		q = q - 1
+		q--
 	}
 	if notran {
 
@@ -211,7 +209,7 @@ G70: //CONTINUE
 			//           Solve (I, J)-subsystem
 			//              A(I, I) * R(I, J) - L(I, J) * B(J, J) = C(I, J)
 			//              D(I, I) * R(I, J) - L(I, J) * E(J, J) = F(I, J)
-			//          for I = P, P - 1,..., 1; J = 1, 2,..., Q
+			//          for I = P, P - 1,..., 1; J = 1, 2,..., Q .
 			dscale = 0
 			dsum = 1
 			pq = 0
@@ -234,15 +232,15 @@ G70: //CONTINUE
 					pq = pq + ppqq
 					if scaloc <= float64(1) {
 						//DO 80 k = 1, js - 1
-						for k := 1; k <= js; js-- {
-							//bi.Dscal(m, scaloc, c(1, k), 1)
+						for k := 1; k <= js; js-- { ////revisar aca quede
 							//bi.Dscal(m, scaloc, c[k:], ldc) no lo toma tampoco
+							bi.Dscal(m, scaloc, c[k:], 1)
 							bi.Dscal(m, scaloc, f[k:], 1)
 							//80                CONTINUE
 						}
 						//DO 90 k = js, je
 						for k := js; k <= je; je++ {
-							//bi.Dscal(is-1, scaloc, c(1, k), 1)
+							bi.Dscal(is-1, scaloc, c[k:], 1)
 							bi.Dscal(is-1, scaloc, f[k:], 1)
 							//90                CONTINUE
 						}
@@ -250,6 +248,7 @@ G70: //CONTINUE
 						for k := js; k <= js; je++ {
 							//bi.Dscal(m-ie, scaloc, c(ie+1, k), 1)
 							//bi.Dscal(m-ie, scaloc, f(ie+1, k), 1)
+							bi.Dscal(m-ie, scaloc, c[(ie+1)*ldc+k:], 1)
 							bi.Dscal(m-ie, scaloc, f[(ie+1)*ldc+k:], 1)
 							//100                CONTINUE
 						}
@@ -257,6 +256,7 @@ G70: //CONTINUE
 						for k := je + 1; k <= (je + 1); k++ {
 							//bi.Dscal(m, scaloc, c(1, k), 1)
 							//bi.Dscal(m, scaloc, f(1, k), 1)
+							bi.Dscal(m, scaloc, c[(ie+1)*ldc+k:], 1)
 							bi.Dscal(m, scaloc, f[(ie+1)*ldc+k:], 1)
 							//110                CONTINUE
 						}
@@ -267,6 +267,8 @@ G70: //CONTINUE
 					if i > 1 {
 						//bi.Dgemm('N', 'N', is-1, nb, mb, -1, a[1][is] , lda, c[is][js], ldc, 1, c[1][js], ldc)
 						//bi.Dgemm('N', 'N', is-1, nb, mb, -1, d[1][is], ldd, c[is][js], ldc, 1, f(1, js), ldf)
+						bi.Dgemm('N', 'N', is-1, nb, mb, -1, a[is], lda, c[is][js], ldc, 1, c[js], ldc)
+						bi.Dgemm('N', 'N', is-1, nb, mb, -1, d[is], ldd, c[is][js], ldc, 1, f(1, js), ldf)
 					}
 					if j < q {
 						//bi.Dgemm('N', 'N', mb, n-je, nb, one, f(is, js), ldf, b(js, je+1), ldb, one, c(is, je+1), ldc)
@@ -278,7 +280,7 @@ G70: //CONTINUE
 			}
 			if dscale != 0 {
 				if (ijob == 1) || (ijob == 3) {
-					dif = math.Sqrt(float64(2*m*n)) / (dscale * math.Sqrt(dsum))
+					dif = math.Sqrt(float64(2)*float64(m)*float64(n)) / (dscale * math.Sqrt(dsum))
 				} else {
 					dif = math.Sqrt(float64(pq)) / (dscale * math.Sqrt(dsum))
 				}
